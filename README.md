@@ -59,6 +59,7 @@ The API key is read by server routes only; it is not sent to browser code. Witho
 - The chat and document analysis routes make real server-side calls to Google's official `@google/generative-ai` SDK, using the stable `gemini-3.5-flash-lite` model.
 - Calls happen only after a user action. Earnings arithmetic is local and does not use Gemini.
 - Output is capped at 320 tokens for chat and 300 tokens for document extraction. Requests time out after 25 seconds.
+- Chat requests carry up to 11 recent messages so long conversations keep working within the server's 12-message and 10,000-character limits; chat remains in browser memory only.
 - A process-local limit allows up to 10 validated Gemini-backed requests per minute per client identifier. For a multi-instance deployment, replace this with a shared rate-limit store.
 - Chat history and uploaded files are not saved by the app. Uploaded documents are sent to Google for analysis; redact bank details and identity numbers before uploading.
 - Errors are converted to concise, status-specific guidance. Raw provider messages and document contents are not returned to the browser or included in app logs.
@@ -88,7 +89,7 @@ npx tsc --noEmit
 npm run build
 ```
 
-The automated tests do not call Gemini or consume API quota. They cover earnings calculations, request validation and limits, supported document signatures, rate limiting, and safe Gemini error messages.
+The automated tests do not call Gemini or consume API quota. They cover earnings calculations, bounded chat history and request validation, supported document signatures, rate limiting, and safe Gemini error messages.
 
 ## Project structure
 
