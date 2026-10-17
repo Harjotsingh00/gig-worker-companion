@@ -1,24 +1,19 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import {
-  GIG_SAHAYAK_SYSTEM_PROMPT,
-  supportedLanguages,
-  workerRoles,
-  type ChatLanguage,
-  type WorkerRole,
-} from "@/lib/prompts";
+  buildSystemInstruction,
+  MAX_REQUEST_BYTES,
+  validateChatRequest,
+} from "@/lib/chat-contract";
+import { consumeGeminiRequest, getRequestIdentifier } from "@/lib/rate-limit";
+import { readBodyAtMost } from "@/lib/request-body";
+import { GEMINI_MODEL } from "@/lib/gemini-config";
+import { getGeminiFailure } from "@/lib/gemini-errors";
 
 export const runtime = "nodejs";
-const MAX_REQUEST_BYTES = 64_000;
-
-type Message = { role: "user" | "assistant"; content: string };
+export const maxDuration = 30;
 
 export async function POST(request: Request) {
-  const contentLength = Number(request.headers.get("content-length") ?? 0);
-  if (contentLength > MAX_REQUEST_BYTES) {
-    return NextResponse.json({ error: "This message is too long. Please shorten it and try again." }, { status: 413 });
-  }
-
   if (!process.env.GEMINI_API_KEY) {
     return NextResponse.json(
       { error: "Gemini is not configured. Add GEMINI_API_KEY to .env.local and restart the app." },
@@ -26,63 +21,63 @@ export async function POST(request: Request) {
     );
   }
 
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_REQUEST_BYTES) {
+    return NextResponse.json({ error: "This request is too large. Please shorten it and try again." }, { status: 413 });
+  }
+
+  let boundedBody: Uint8Array | null;
   try {
-    const body: unknown = await request.json();
-    if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Invalid request." }, { status: 400 });
-    }
+    boundedBody = await readBodyAtMost(request, MAX_REQUEST_BYTES);
+  } catch {
+    return NextResponse.json({ error: "Could not read this request. Please try again." }, { status: 400 });
+  }
+  if (!boundedBody) {
+    return NextResponse.json({ error: "This request is too large. Please shorten it and try again." }, { status: 413 });
+  }
 
-    const { messages, role, language } = body as {
-      messages?: unknown;
-      role?: unknown;
-      language?: unknown;
-    };
-    if (
-      !Array.isArray(messages) ||
-      messages.length === 0 ||
-      messages.length > 12 ||
-      !workerRoles.includes(role as WorkerRole) ||
-      !supportedLanguages.includes(language as ChatLanguage)
-    ) {
-      return NextResponse.json({ error: "Choose a valid role and language, then send a message." }, { status: 400 });
-    }
+  let body: unknown;
+  try {
+    body = JSON.parse(new TextDecoder().decode(boundedBody));
+  } catch {
+    return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
+  }
 
-    const chatMessages = messages as Message[];
-    const conversationLength = chatMessages.reduce(
-      (total, message) => total + (typeof message?.content === "string" ? message.content.length : 0),
-      0,
-    );
-    const invalidMessage = chatMessages.some(
-      (message) =>
-        !message ||
-        (message.role !== "user" && message.role !== "assistant") ||
-        typeof message.content !== "string" ||
-        message.content.trim().length === 0 ||
-        message.content.length > 2000,
-    );
-    if (invalidMessage || conversationLength > 10000 || chatMessages[chatMessages.length - 1]?.role !== "user") {
-      return NextResponse.json({ error: "Messages must end with a valid user message." }, { status: 400 });
-    }
+  const validation = validateChatRequest(body);
+  if (!validation.ok) {
+    return NextResponse.json({ error: validation.error }, { status: validation.status });
+  }
 
+  const rateLimit = consumeGeminiRequest(getRequestIdentifier(request));
+  if (!rateLimit.allowed) {
+    return NextResponse.json({ error: "Too many requests. Please wait a minute and try again." }, { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } });
+  }
+
+  const { messages, role, language } = validation.value;
+  try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
-      // Gemini 1.5 and 2.0 Flash have been shut down. 2.5 Flash remains available.
-      model: "gemini-2.5-flash",
-      systemInstruction: `${GIG_SAHAYAK_SYSTEM_PROMPT}\n\nThe user's selected role is ${role}. The user selected ${language}; reply only in ${language}. For Indian government rights and schemes, do not invent scheme names, eligibility rules, amounts, or deadlines. If details may vary by state or be out of date, say so plainly and ask for the worker's state. Encourage checking current details through official government sources.`,
+      model: GEMINI_MODEL,
+      systemInstruction: buildSystemInstruction(role, language),
       generationConfig: {
         maxOutputTokens: 320,
-        temperature: 0.2,
+        // Gemini 3.5 Flash-Lite defaults to minimal thinking. Keep provider defaults
+        // for sampling parameters as recommended for Gemini 3 models.
       },
     });
-    const history = chatMessages.slice(0, -1).map((message) => ({
+    const history = messages.slice(0, -1).map((message) => ({
       role: message.role === "assistant" ? "model" : "user",
       parts: [{ text: message.content }],
     }));
     const chat = model.startChat({ history });
-    const result = await chat.sendMessage(chatMessages[chatMessages.length - 1].content);
+    const result = await chat.sendMessage(messages[messages.length - 1].content, {
+      signal: request.signal,
+      timeout: 25_000,
+    });
     return NextResponse.json({ text: result.response.text() });
   } catch (error) {
-    console.error("Gemini chat request failed", error);
-    return NextResponse.json({ error: "Couldn't get a reply right now. Please try again." }, { status: 500 });
+    const failure = getGeminiFailure(error, "chat");
+    console.error("Gemini chat request failed", failure.providerStatus ?? (error instanceof Error ? error.name : "UnknownError"));
+    return NextResponse.json({ error: failure.message }, { status: 502 });
   }
 }

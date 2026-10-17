@@ -9,5 +9,6 @@ body { margin: 0; background: #090d0c; color: #f3f6f2; font-family: Arial, Helve
 ::selection { background: #b7f36b; color: #101614; }
 button, textarea { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid #b7f36b; outline-offset: 2px; }
 .scrollbar-hide { scrollbar-width: none; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
