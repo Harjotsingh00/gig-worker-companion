@@ -7,7 +7,6 @@ import ChatComposer from "@/components/ChatComposer";
 import ChatMessages, { type Message } from "@/components/ChatMessages";
 import WorkerPreferences from "@/components/WorkerPreferences";
 import type { ChatLanguage, WorkerRole } from "@/lib/prompts";
-import { getRecentChatMessages } from "@/lib/chat-history";
 
 export default function Home() {
   const [role, setRole] = useState<WorkerRole>("Delivery Partner");
@@ -38,7 +37,7 @@ export default function Home() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: getRecentChatMessages(nextMessages.map(({ role: messageRole, content }) => ({ role: messageRole, content }))), role, language }),
+        body: JSON.stringify({ messages: nextMessages.map(({ role: messageRole, content }) => ({ role: messageRole, content })), role, language }),
       });
       const data: { text?: string; error?: string } = await response.json();
       if (!response.ok) throw new Error(data.error || "Couldn't get a reply. Please try again.");

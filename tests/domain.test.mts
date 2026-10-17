@@ -7,7 +7,6 @@ import { isSupportedDocument, MAX_DOCUMENT_BYTES } from "../lib/document-contrac
 import { consumeGeminiRequest, getRequestIdentifier } from "../lib/rate-limit.ts";
 import { readBodyAtMost } from "../lib/request-body.ts";
 import { getGeminiFailure } from "../lib/gemini-errors.ts";
-import { getRecentChatMessages } from "../lib/chat-history.ts";
 
 test("earnings summary calculates net from worker-provided amounts", () => {
   assert.deepEqual(summarizeEarnings(1_200, 135.5), {
@@ -54,27 +53,6 @@ test("chat contract enforces message and conversation limits", () => {
   const result = validateChatRequest({ role: "Driver", language: "English", messages });
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.status, 413);
-});
-
-test("chat history stays within the API limit and starts with a user turn", () => {
-  const messages = Array.from({ length: 31 }, (_, index) => ({
-    role: index % 2 === 0 ? "user" as const : "assistant" as const,
-    content: `Turn ${index}`,
-  }));
-  const recent = getRecentChatMessages(messages);
-  assert.ok(recent.length <= 12);
-  assert.equal(recent[0]?.role, "user");
-  assert.equal(recent.at(-1)?.role, "user");
-  assert.equal(validateChatRequest({ role: "Driver", language: "English", messages: recent }).ok, true);
-  assert.equal(recent[0]?.content, "Turn 20");
-
-  const longMessages = Array.from({ length: 11 }, (_, index) => ({
-    role: index % 2 === 0 ? "user" as const : "assistant" as const,
-    content: "x".repeat(2_000),
-  }));
-  const bounded = getRecentChatMessages(longMessages);
-  assert.ok(bounded.reduce((total, message) => total + message.content.length, 0) <= 10_000);
-  assert.equal(validateChatRequest({ role: "Driver", language: "English", messages: bounded }).ok, true);
 });
 
 test("system instruction carries every supported role and response language", () => {
