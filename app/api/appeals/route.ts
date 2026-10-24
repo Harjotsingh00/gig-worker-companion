@@ -64,7 +64,7 @@ Desired outcome: Reverse unfair deduction, restore account standing, and request
 
 Language required: ${body.language || "English"}. Keep tone professional, urgent yet courteous.`;
 
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent(prompt, { signal: request.signal, timeout: 25_000 });
     const aiText = result.response.text();
 
     return NextResponse.json({
@@ -77,7 +77,10 @@ Language required: ${body.language || "English"}. Keep tone professional, urgent
       source: "gemini",
     });
   } catch (error) {
-    console.error("Gemini appeal generation error:", error);
+    const status = typeof error === "object" && error !== null && "status" in error
+      ? (error as { status?: unknown }).status
+      : undefined;
+    console.error("Gemini appeal generation failed", typeof status === "number" && Number.isInteger(status) ? status : "provider_error");
     return NextResponse.json({
       success: true,
       appeal: baseline,

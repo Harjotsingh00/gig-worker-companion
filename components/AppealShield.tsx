@@ -86,11 +86,26 @@ export default function AppealShield({ role, language, apiKey }: AppealShieldPro
         }),
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data: {
+        success?: boolean;
+        error?: string;
+        appeal?: { recipient: string; subject: string; body: string };
+      };
+      try {
+        data = JSON.parse(responseText) as typeof data;
+      } catch {
+        throw new Error(response.ok
+          ? "The server returned an unreadable response. Refresh the page and try again."
+          : `The server could not create the grievance draft (HTTP ${response.status}). Please try again.`);
+      }
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to generate appeal.");
       }
 
+      if (!data.appeal || typeof data.appeal.body !== "string") {
+        throw new Error("The server returned an incomplete grievance draft. Please try again.");
+      }
       setAppealResult(data.appeal);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error generating appeal. Please try again.");

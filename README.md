@@ -90,7 +90,7 @@ npx tsc --noEmit
 
 - **Client Session Key Storage**: Users can configure their Gemini API Key safely in browser memory/localStorage; keys are passed via secure server request headers.
 - **No Chat Logging**: Conversations and uploaded payment slips are not stored on persistent server disks.
-- **Multimodal AI**: Powered by Google's Gemini SDK. Chat uses `gemini-3.8-flash` and retries once on a missing-model or temporary 503 response with `gemini-3.6-flash`; document extraction uses `gemini-3.5-flash-lite` for lower latency. Model IDs can be overridden with `GEMINI_MODEL`, `GEMINI_BACKUP_MODEL`, and `GEMINI_DOCUMENT_MODEL`. Quota errors are surfaced without retrying.
+- **Multimodal AI**: Powered by Google's Gemini SDK. Chat and grievance drafting use `gemini-3.5-flash-lite` for concise, lower-latency guidance, with chat retrying once on a missing-model or temporary 503 response through `gemini-3.6-flash`. Document extraction uses `gemini-3.5-flash-lite` for multimodal parsing. Model IDs can be overridden with `GEMINI_MODEL`, `GEMINI_BACKUP_MODEL`, and `GEMINI_DOCUMENT_MODEL`. Quota errors are surfaced without retrying.
 - **Bounded Payload & Rate Limiting**: All chat and document requests enforce strict byte limits and IP-based rate limiting to protect API quotas.
 
 ---

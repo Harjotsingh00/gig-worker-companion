@@ -297,7 +297,15 @@ export default function ChatView({
         }),
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data: { error?: string; text?: string };
+      try {
+        data = JSON.parse(responseText) as typeof data;
+      } catch {
+        throw new Error(response.ok
+          ? "The server returned an unreadable reply. Refresh the page and try again."
+          : `The assistant request failed (HTTP ${response.status}). Please try again.`);
+      }
       if (!response.ok) {
         throw new Error(data.error || "Failed to receive AI reply.");
       }
