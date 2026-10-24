@@ -57,42 +57,35 @@ export async function POST(request: Request) {
   const { messages, role, language } = validation.value;
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    let modelName = GEMINI_MODEL;
-    let model = genAI.getGenerativeModel({
-      model: modelName,
-      systemInstruction: buildSystemInstruction(role, language),
-      generationConfig: {
-        maxOutputTokens: 500,
-      },
-    });
-
     const history = messages.slice(0, -1).map((message) => ({
       role: message.role === "assistant" ? "model" : "user",
       parts: [{ text: message.content }],
     }));
 
-    try {
+    async function sendWithModel(modelName: string) {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: buildSystemInstruction(role, language),
+        generationConfig: { maxOutputTokens: 500 },
+      });
       const chat = model.startChat({ history });
       const result = await chat.sendMessage(messages[messages.length - 1].content, {
         signal: request.signal,
         timeout: 25_000,
       });
-      return NextResponse.json({ text: result.response.text() });
+      return result.response.text();
+    }
+
+    try {
+      return NextResponse.json({ text: await sendWithModel(GEMINI_MODEL) });
     } catch (err: unknown) {
-      // If primary model is not found, fallback to backup model
+      // Retry a transient provider outage or missing primary model once on the configured backup.
       const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("not found") || msg.includes("404")) {
-        model = genAI.getGenerativeModel({
-          model: BACKUP_GEMINI_MODEL,
-          systemInstruction: buildSystemInstruction(role, language),
-          generationConfig: { maxOutputTokens: 500 },
-        });
-        const chat = model.startChat({ history });
-        const result = await chat.sendMessage(messages[messages.length - 1].content, {
-          signal: request.signal,
-          timeout: 25_000,
-        });
-        return NextResponse.json({ text: result.response.text() });
+      const status = typeof err === "object" && err !== null && "status" in err
+        ? (err as { status?: unknown }).status
+        : undefined;
+      if (status === 503 || status === 404 || msg.toLowerCase().includes("not found")) {
+        return NextResponse.json({ text: await sendWithModel(BACKUP_GEMINI_MODEL) });
       }
       throw err;
     }
