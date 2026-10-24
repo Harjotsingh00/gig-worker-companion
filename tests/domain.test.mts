@@ -109,3 +109,54 @@ test("bounded request reader accepts bodies at the limit and rejects larger stre
   const tooLarge = new Request("http://localhost", { method: "POST", body: "12345" });
   assert.equal(await readBodyAtMost(tooLarge, 4), null);
 });
+
+test("calculateShiftProfitability computes fuel burn, net wage, and profit status correctly", async () => {
+  const { calculateShiftProfitability } = await import("../lib/fuel-optimizer.ts");
+  const result = calculateShiftProfitability({
+    grossEarnings: 1200,
+    distanceKm: 80,
+    fuelPricePerLiter: 100,
+    mileageKmPerLiter: 40,
+    shiftHours: 8,
+    otherExpenses: 50,
+  });
+  assert.equal(result.fuelConsumedLiters, 2);
+  assert.equal(result.fuelCost, 200);
+  assert.equal(result.totalExpenses, 250);
+  assert.equal(result.netEarnings, 950);
+  assert.equal(result.realHourlyWage, 118.75);
+  assert.equal(result.status, "healthy");
+});
+
+test("generateAppealDraft formats formal dispute letter with correct recipient and language", async () => {
+  const { generateAppealDraft } = await import("../lib/appeals.ts");
+  const appealEn = generateAppealDraft({
+    platform: "Zomato",
+    issue: "false_customer_claim",
+    workerName: "Harjot Singh",
+    partnerId: "ZOM-9921",
+    orderOrTripId: "ORD-5544",
+    incidentDate: "2026-10-24",
+    details: "Delivered to pin location, customer falsely claimed refund.",
+    amountDeducted: "350",
+    language: "English",
+  });
+  assert.ok(appealEn.recipient.includes("zomato"));
+  assert.ok(appealEn.body.includes("Harjot Singh"));
+  assert.ok(appealEn.body.includes("ZOM-9921"));
+  assert.ok(appealEn.body.includes("₹350"));
+
+  const appealHi = generateAppealDraft({
+    platform: "Swiggy",
+    issue: "unfair_deactivation",
+    workerName: "राकेश",
+    partnerId: "SWG-112",
+    orderOrTripId: "SWG-887",
+    incidentDate: "2026-10-23",
+    details: "बिना सूचना के आईडी ब्लॉक कर दी गई।",
+    language: "Hindi",
+  });
+  assert.ok(appealHi.recipient.includes("swiggy"));
+  assert.ok(appealHi.body.includes("शिकायत एवं अपील") || appealHi.subject.includes("शिकायत"));
+});
+

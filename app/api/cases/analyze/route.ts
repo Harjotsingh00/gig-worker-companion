@@ -17,9 +17,9 @@ const roles = new Set<WorkerRole>(["Delivery Partner", "Driver", "Daily-wage"]);
 const languages = new Set<ChatLanguage>(["English", "Hindi", "Punjabi"]);
 
 export async function POST(request: Request) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = request.headers.get("x-gemini-key") || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: "Document help needs Gemini setup. Add GEMINI_API_KEY to .env.local and restart the app." }, { status: 503 });
+    return NextResponse.json({ error: "Document help needs Gemini setup. Add GEMINI_API_KEY to .env.local or click 'API Key' in the top bar to connect." }, { status: 503 });
   }
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (contentLength > MAX_REQUEST_BYTES) return NextResponse.json({ error: "File is too large. Choose a file under 3 MB." }, { status: 413 });

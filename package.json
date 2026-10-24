@@ -1,5 +1,5 @@
 {
-  "name": "gig-worker-companion",
+  "name": "saarthi-ai",
   "version": "1.0.0",
   "private": true,
   "engines": {
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "lucide-react": "^1.61.0",
     "next": "15.5.28",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
